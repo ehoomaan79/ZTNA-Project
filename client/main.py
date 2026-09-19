@@ -1,9 +1,6 @@
 import argparse
-import os
 import socket
-import threading
 import time
-import readline
 
 from client.connection import (
     connect_to_server,
@@ -130,14 +127,12 @@ def request_peer(
     connection,
     token,
     peer_id,
-    peer_name
 ):
     connection.sendall(
         create_message(
             PEER_REQUEST,
             token=token,
             peer_id=peer_id,
-            peer_name=peer_name
         )
     )
 
@@ -175,9 +170,6 @@ def receive_peer_data(
             continue
 
         except socket.timeout:
-            continue
-
-        except OSError:
             return None
 
         if not data:
@@ -191,85 +183,14 @@ def receive_peer_data(
         if message["type"] != DATA:
             continue
 
-        try:
-            plaintext = decrypt(
-                shared_key,
-                decode_bytes(message["nonce"]),
-                decode_bytes(message["ciphertext"]),
-            )
-        except Exception:
-            continue
+        plaintext = decrypt(
+            shared_key,
+            decode_bytes(message["nonce"]),
+            decode_bytes(message["ciphertext"]),
+        )
 
         return plaintext.decode("utf-8")
 
-
-def chat_loop(
-    udp_socket,
-    shared_key,
-    peer_name
-):
-    stop_event = threading.Event()
-
-    def receive_loop():
-        while not stop_event.is_set():
-            message = receive_peer_data(
-                udp_socket,
-                shared_key,
-            )
-            current_input = readline.get_line_buffer()
-
-            if message is None:
-                continue
-
-            print(
-                f"\r\n\033[F{peer_name}: {message}\033[K"
-            )
-            print(
-                f"You: {current_input}",
-                end="",
-                flush=True,
-            )
-
-    receiver = threading.Thread(
-        target=receive_loop,
-        daemon=True,
-    )
-
-    receiver.start()
-
-    print("Interactive chat started.")
-    print("Type /quit to close the chat.\n" \
-    "-----------------------------------------------")
-
-    try:
-        while True:
-            try:
-                text = input("You: ")
-
-            except EOFError:
-                break
-
-            if text == "/quit":
-                break
-
-            if not text:
-                continue
-
-            send_peer_data(
-                udp_socket,
-                shared_key,
-                text,
-            )
-
-    except KeyboardInterrupt:
-        pass
-
-    finally:
-        stop_event.set()
-
-def clear_screen():
-    # 'nt' means Windows, 'posix' means Mac or Linux
-    os.system('cls' if os.name == 'nt' else 'clear')
 
 def main():
     parser = argparse.ArgumentParser(
@@ -355,7 +276,6 @@ def main():
             args.username,
         )
 
-        clear_screen()
         print("Authentication successful.")
         print("UDP endpoint registered.")
 
@@ -369,8 +289,6 @@ def main():
                     continue
 
                 peer_endpoint = message
-
-                peer_name = peer_endpoint["peer_name"]
 
                 peer_public_key = (
                     X25519PublicKey.from_public_bytes(
@@ -407,12 +325,10 @@ def main():
                         "Direct peer connection established."
                     )
 
-                    udp_socket.settimeout(None)
-
-                    chat_loop(
+                    send_peer_data(
                         udp_socket,
                         shared_key,
-                        peer_name
+                        f"Hello from {args.username}",
                     )
 
             return
@@ -421,7 +337,6 @@ def main():
             connection,
             token,
             args.peer,
-            args.username
         )
 
         if endpoint["type"] != ENDPOINT_INFO:
@@ -471,13 +386,23 @@ def main():
             "Direct peer connection established."
         )
 
-        udp_socket.settimeout(None)
-
-        chat_loop(
+        send_peer_data(
             udp_socket,
             shared_key,
-            args.peer
+            f"Hello from {args.username}",
         )
+
+        print("Encrypted message sent.")
+
+        message = receive_peer_data(
+            udp_socket,
+            shared_key,
+        )
+
+        if message:
+            print(
+                f"Received: {message}"
+            )
 
     finally:
         udp_socket.close()

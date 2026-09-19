@@ -165,7 +165,6 @@ def send_endpoint_info(connection, endpoint):
             public_ip=endpoint["public_ip"],
             public_port=endpoint["public_port"],
             public_key=endpoint["public_key"],
-            peer_name=endpoint["peer_name"],
         )
     )
 
@@ -452,7 +451,6 @@ def udp_endpoint_listener(host, port):
                 "public_ip": address[0],
                 "public_port": address[1],
                 "public_key": client["public_key"],
-                "peer_name": client_id,
             }
 
             clients_condition.notify_all()
